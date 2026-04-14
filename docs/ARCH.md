@@ -33,7 +33,7 @@ Client (Web / Mobile)
   │             Data and Infrastructure                 │
   │                                                     │
   │  Redis        Postgres      Key           Crisis   │
-  │               + pgvector    Management    Pipeline  │
+  │               + qdrant    Management    Pipeline  │
   └────────────────────────────────────────────────────┘
           |
           v
@@ -44,7 +44,7 @@ Client (Web / Mobile)
 
 ## Tier 1 — Client
 
-The web and mobile clients handle user interaction and send requests to the API gateway. For premium users, a local-only mode routes inference entirely on-device — nothing leaves the device at all.
+The web and mobile clients handle user interaction and send requests to the API gateway.
 
 ---
 
@@ -147,7 +147,7 @@ This two-pass approach (input + output) ensures crisis signals in LLM-generated 
 | Latency target | < 5ms P99 read/write                                                  |
 
 
-### PostgreSQL + pgvector — Long-Term Memory
+### PostgreSQL + qdrant — Long-Term Memory
 
 
 | Property           | Detail                                                                                                          |
