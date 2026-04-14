@@ -1,0 +1,11 @@
+{
+  "name": "talktome-conversation-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Conversation turn orchestration scaffold",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node src/index.js",
+    "start": "node src/index.js"
+  }
+}

@@ -160,9 +160,6 @@ This two-pass approach (input + output) ensures crisis signals in LLM-generated 
 
 The vector encodes emotional territory, not message content. Semantically meaningful for continuity but not re-identifiable on its own.
 
-### Key Management Service
-
-AWS KMS handles key storage and derivation. On forget-me, key destruction makes all stored data cryptographically irretrievable within 24 hours.
 
 ### Crisis Pipeline — Isolated Service
 
@@ -204,7 +201,6 @@ What is deliberately not tracked: session length, crisis resource tap-through ra
 
 | Mechanism              | Implementation                                                            |
 | ---------------------- | ------------------------------------------------------------------------- |
-| Encryption             | Managed via AWS KMS                                                       |
 | No-log guarantee       | No raw content in any persistent log · no IP addresses linked to identity |
 | Incognito mode         | Zero persistence — no theme vector, no session data saved                 |
 | Cryptographic deletion | Key destruction on forget-me — all data irretrievable within 24 hours     |
@@ -212,17 +208,3 @@ What is deliberately not tracked: session length, crisis resource tap-through ra
 
 
 ---
-
-## Scalability Plan
-
-
-| Milestone      | Key change                              |
-| -------------- | --------------------------------------- |
-| 0–10K users    | Managed LLM API + single Redis instance |
-| 10K–100K users | Redis Cluster + horizontal autoscaling  |
-| 100K–1M+ users | Multi-region routing + CDN              |
-
-
----
-
-*TalktoMe Architecture · Internal and Confidential · April 2025*
