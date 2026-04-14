@@ -22,7 +22,7 @@ Every conversation turn runs through a processing pipeline:
 
 1. **Emotion Detection** — classifies emotional state from lexical signals, semantic embeddings, conversation arc, and explicit user framing
 2. **Adaptive Therapy Engine (ATE)** — selects a therapy modality based on detected state, enforces a 2-turn mode-lock before switching to prevent emotional whiplash
-3. **LLM Service** — generates a response from a fully assembled, modality-specific system prompt
+3. **External LLM API** — sends the assembled, modality-specific prompt to a managed provider API (no self-hosted model)
 4. **Response Filter** — safety and quality gate; re-runs crisis detection on every output before it reaches the user
 
 In parallel, a dedicated **Crisis Detection** classifier runs on every message. Soft flags (p > 0.7) surface resources warmly inline. Hard flags (p > 0.9) reroute the entire pipeline to crisis mode.
@@ -55,7 +55,7 @@ In parallel, a dedicated **Crisis Detection** classifier runs on every message. 
 | Conversation Service | Node.js |
 | Emotion Detection | Python · fine-tuned sentence-transformer |
 | Adaptive Therapy Engine | Python · rule + model hybrid |
-| LLM Service | Managed API |
+| External LLM API | Managed provider API (no self-hosting) |
 | Response Filter | Python |
 | Crisis Pipeline | Python · dedicated isolated queue |
 
@@ -69,7 +69,7 @@ In parallel, a dedicated **Crisis Detection** classifier runs on every message. 
 ### Infrastructure and Observability
 | Concern | Technology |
 |---------|------------|
-| Containerisation | Docker / Kubernetes |
+| Containerisation | Docker |
 | Monitoring | Datadog |
 
 ---
@@ -147,7 +147,7 @@ talktome/
 │   │   ├── templates/              # Prompt templates per modality
 │   │   └── requirements.txt
 │   │
-│   ├── llm/                        # Python — LLM API wrapper
+│   ├── llm/                        # Python — external LLM API client wrapper
 │   │   ├── client.py
 │   │   ├── prompt_builder.py
 │   │   └── requirements.txt
@@ -174,15 +174,13 @@ talktome/
 │
 ├── infra/
 │   ├── docker-compose.yml          # Local dev
-│   └── k8s/
-│       ├── conversation.yaml
-│       ├── emotion.yaml
-│       ├── ate.yaml
-│       ├── llm.yaml
-│       ├── filter.yaml
-│       └── crisis.yaml
+│   └── nginx.conf                  # Reverse proxy
 │
 ├── docs/
+│   ├── ARCH.md
+│   ├── planning/
+│   │   ├── epics.md
+│   │   └── stories.md
 │   └── architecture.md
 |
 ├── README.md

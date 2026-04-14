@@ -1,4 +1,4 @@
-"""LLM client wrapper scaffold."""
+"""External managed LLM API client scaffold (no self-hosted inference)."""
 
 
 def generate_response(prompt: str) -> str:

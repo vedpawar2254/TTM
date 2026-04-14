@@ -2,7 +2,7 @@
 
 ## Overview
 
-TalktoMe follows a six-tier layered architecture built around three constraints: privacy by structure, sub-800ms P95 latency to first token, and a 4-nines SLA on the crisis detection path. The system is stateless at the service layer — all session state lives in Redis — so any pod can serve any request and horizontal scaling is straightforward.
+TalktoMe follows a six-tier layered architecture built around three constraints: privacy by structure, sub-800ms P95 latency to first token, and a 4-nines SLA on the crisis detection path. The system is stateless at the service layer — all session state lives in Redis — so any instance can serve any request and horizontal scaling is straightforward.
 
 ---
 
@@ -23,8 +23,8 @@ Client (Web / Mobile)
   ┌────────────────────────────────────────────────────┐
   │                 Processing Layer                    │
   │                                                     │
-  │  Emotion      Therapy       LLM         Response   │
-  │  Detection ──► Engine ────► Service ──► Filter     │
+  │  Emotion      Therapy       LLM API     Response   │
+  │  Detection ──► Engine ────► Client ───► Filter     │
   └────────────────────────────────────────────────────┘
           |                         |
           |                         | async memory update
@@ -75,7 +75,7 @@ On each turn it: decrypts the incoming message, fetches the last 20 turns from R
 
 ## Tier 4 — Processing Layer
 
-Four services run on every turn. Emotion Detection and Crisis Detection run in parallel at the start; the remaining three are sequential.
+Four processing components run on every turn. Emotion Detection and Crisis Detection run in parallel at the start; the remaining three are sequential.
 
 ### Emotion Detection Service
 
@@ -94,7 +94,7 @@ Output: an `EmotionState` vector (arousal level, valence, topic category, confid
 
 ### Adaptive Therapy Engine (ATE)
 
-Maps the `EmotionState` to a therapy modality and builds the full system prompt for the LLM. The mode-lock rule — 2+ sustained turns of a new signal before switching modality — is the core clinical logic that prevents emotional whiplash.
+Maps the `EmotionState` to a therapy modality and builds the full system prompt for the external LLM API. The mode-lock rule — 2+ sustained turns of a new signal before switching modality — is the core clinical logic that prevents emotional whiplash.
 
 
 | Detected signal              | Modality                         | Behaviour                               |
@@ -118,9 +118,10 @@ System prompt assembled per turn:
 [6] Current message
 ```
 
-### LLM Service
+### External LLM API Client
 
-Receives the assembled prompt and returns a streamed completion via a managed API.
+Receives the assembled prompt and returns a streamed completion via a managed provider API.
+TalktoMe does not host or run model inference.
 
 Latency target: first token streamed within 800ms P95.
 
