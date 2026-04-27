@@ -1,1 +1,2 @@
-regex
+fastapi
+uvicorn[standard]

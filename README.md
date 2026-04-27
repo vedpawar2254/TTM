@@ -18,25 +18,51 @@ The barrier to emotional support isn't access to a calendar booking — it's the
 
 ## How It Works
 
-Every conversation turn runs through a processing pipeline:
+Every conversation turn runs through a sequential processing pipeline, with crisis detection running in parallel throughout:
 
-1. **Emotion Detection** — classifies emotional state from lexical signals, semantic embeddings, conversation arc, and explicit user framing
-2. **Adaptive Therapy Engine (ATE)** — selects a therapy modality based on detected state, enforces a 2-turn mode-lock before switching to prevent emotional whiplash
-3. **External LLM API** — sends the assembled, modality-specific prompt to a managed provider API (no self-hosted model)
-4. **Response Filter** — safety and quality gate; re-runs crisis detection on every output before it reaches the user
+```
+User message
+    │
+    ├─► Crisis Detection (parallel, every turn)
+    │       soft flag (medium risk) → surface resources inline
+    │       hard flag (high risk)   → reroute entire pipeline to crisis mode
+    │
+    └─► Emotion Detection
+            │
+            ▼
+        Adaptive Therapy Engine  →  select modality + build system prompt
+            │
+            ▼
+        LLM API  (OpenRouter / any OpenAI-compatible provider)
+            │
+            ▼
+        Response Filter  →  safety gate + crisis re-check on output
+            │
+            ▼
+        User sees response
+```
 
-In parallel, a dedicated **Crisis Detection** classifier runs on every message. Soft flags (p > 0.7) surface resources warmly inline. Hard flags (p > 0.9) reroute the entire pipeline to crisis mode.
+### Emotion Detection — Four Signals
 
-### Therapy Modalities
+| Signal | Method |
+|--------|--------|
+| Lexical | Intensity markers, affect words, urgency language |
+| Semantic | Similarity to therapy-tagged high/low arousal clusters |
+| Conversation arc | Tone shift across last N turns — prevents one-turn overreaction |
+| Explicit framing | User statements like "I just need to vent" override the classifier |
 
-| Emotional signal | Modality | Approach |
-|-----------------|----------|----------|
-| High arousal, anger | Validation + Containment | Hold space, reflect, do not reframe |
-| Sadness, grief | Empathic reflection + Journaling | Gentle prompts, no silver linings |
-| Cognitive loops | CBT — Thought challenging | Socratic questions, surface distortions |
+### Adaptive Therapy Engine (ATE)
+
+Maps the detected emotion to a therapy modality. A **2-turn mode-lock** prevents emotional whiplash — the modality only switches after the new signal is sustained for 2+ turns.
+
+| Detected emotion | Modality | Behaviour |
+|-----------------|----------|-----------|
+| Anger, high arousal | Validation + Containment | Hold space, reflect, do not reframe |
+| Sadness, grief | Empathic Reflection + Journaling | Gentle prompts, no silver linings |
+| Looping thoughts | CBT — Thought Challenging | Socratic questions, surface distortions |
 | Low energy, emptiness | Mindfulness + Grounding | Sensory anchoring, present-focus |
-| Goal-oriented | SFBT — Solution-focused | Amplify agency, small steps |
-| Existential | Narrative + Acceptance | Reauthoring, ACT-adjacent framing |
+| Goal-oriented | SFBT — Solution-Focused | Amplify agency, small steps |
+| Existential, meaning-seeking | Narrative + Acceptance | Reauthoring, ACT-adjacent framing |
 
 ---
 
@@ -44,33 +70,355 @@ In parallel, a dedicated **Crisis Detection** classifier runs on every message. 
 
 ### Frontend
 | Layer | Technology |
-|-------|------------|
-| Web | Next.js |
-| Mobile | React Native |
+|-------|-----------|
+| Web | Next.js 16 · React 19 · TypeScript |
+| Mobile | React Native *(in development)* |
 
 ### Backend Services
-| Service | Technology |
-|---------|------------|
-| API Gateway | AWS API Gateway |
-| Conversation Service | Node.js |
-| Emotion Detection | Python · fine-tuned sentence-transformer |
-| Adaptive Therapy Engine | Python · rule + model hybrid |
-| External LLM API | Managed provider API (no self-hosting) |
-| Response Filter | Python |
-| Crisis Pipeline | Python · dedicated isolated queue |
+| Service | Technology | Port |
+|---------|-----------|------|
+| Conversation | Node.js 22 · Express | 3001 (Docker) / 4000 (local dev) |
+| Emotion Detection | Python 3 · FastAPI · uvicorn | 8001 |
+| Adaptive Therapy Engine | Python 3 · FastAPI · uvicorn | 8002 |
+| Crisis Detection | Python 3 · FastAPI · uvicorn | 8003 |
+| Response Filter | Python 3 · FastAPI · uvicorn | 8004 |
+| LLM | OpenRouter (OpenAI-compatible API) | — |
 
 ### Data
 | Store | Technology | Purpose |
-|-------|------------|---------|
-| Short-term memory | Redis | Encrypted session turns, 7-day TTL |
-| Long-term memory | PostgreSQL + pgvector | Theme vectors and session summaries |
-| Key management | AWS KMS | Key derivation and storage |
+|-------|-----------|---------|
+| Session history | PostgreSQL 16 | Message turns per session |
+| Short-term memory | Redis 7 | Session state, ATE mode vector |
+| Long-term memory | PostgreSQL + pgvector *(planned)* | Theme vectors, session summaries |
 
-### Infrastructure and Observability
+### Infrastructure
 | Concern | Technology |
-|---------|------------|
-| Containerisation | Docker |
-| Monitoring | Datadog |
+|---------|-----------|
+| Containerisation | Docker · Docker Compose |
+| Reverse proxy | nginx *(production)* |
+
+---
+
+## Project Structure
+
+```
+TalktoMe/
+│
+├── client/
+│   ├── web/                          # Next.js 16 web app
+│   │   ├── app/
+│   │   │   ├── api/
+│   │   │   │   ├── auth/route.ts         # POST /api/auth  →  /auth/anon
+│   │   │   │   ├── sessions/route.ts     # POST /api/sessions  →  /sessions
+│   │   │   │   ├── chat/route.ts         # POST /api/chat  →  conversation service
+│   │   │   │   └── history/
+│   │   │   │       └── [session_id]/
+│   │   │   │           └── route.ts      # GET /api/history/:id  →  conversation service
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx
+│   │   ├── components/
+│   │   │   ├── ChatShell.tsx         # Two-panel chat UI with sidebar
+│   │   │   └── ChatShell.module.css
+│   │   ├── .env.local                # CONVERSATION_SERVICE_URL (gitignored)
+│   │   └── .env.local.example
+│   │
+│   └── mobile/                       # React Native (in development)
+│
+├── services/
+│   ├── conversation/                 # Node.js — turn orchestration
+│   │   ├── src/
+│   │   │   ├── middleware/auth.js     # JWT validation middleware
+│   │   │   ├── routes/
+│   │   │   │   ├── auth.js           # POST /auth/anon — anonymous account creation
+│   │   │   │   ├── sessions.js       # POST /sessions — create session for authed user
+│   │   │   │   └── chat.js           # POST /chat · GET /chat/history/:id
+│   │   │   ├── services/             # emotionClient, ateClient, crisisClient, filterClient, llmClient
+│   │   │   ├── db/                   # pool.js · messages.js
+│   │   │   ├── context/              # Context window assembly
+│   │   │   └── session/              # Redis session management
+│   │   ├── .env                      # Runtime env (gitignored)
+│   │   └── .env.example
+│   │
+│   ├── emotion/                      # Python — emotion detection
+│   │   ├── app.py                    # FastAPI app · POST /classify
+│   │   ├── classifier.py             # Signal aggregator
+│   │   └── signals/
+│   │       ├── lexical.py
+│   │       ├── semantic.py
+│   │       ├── arc.py
+│   │       └── explicit.py
+│   │
+│   ├── ate/                          # Python — Adaptive Therapy Engine
+│   │   ├── app.py                    # FastAPI app · POST /modality
+│   │   ├── engine.py                 # Emotion → modality mapping + mode-lock
+│   │   └── modalities/               # cbt.py · journaling.py · mindfulness.py · narrative.py · sfbt.py · validation.py
+│   │
+│   ├── crisis/                       # Python — crisis detection
+│   │   ├── app.py                    # FastAPI app · POST /classify
+│   │   ├── classifier.py             # Keyword classifier (high / medium / low risk)
+│   │   └── resources.py              # iCall, Vandrevala Foundation numbers
+│   │
+│   ├── filter/                       # Python — response safety gate
+│   │   ├── app.py                    # FastAPI app · POST /check
+│   │   ├── safety.py                 # Clinical claim / hallucination detection
+│   │   └── crisis_recheck.py         # Second-pass crisis scan on LLM output
+│   │
+│   └── llm/                          # Python — LLM client (used by conversation service via Node)
+│       ├── client.py
+│       └── prompt_builder.py
+│
+├── data/
+│   ├── postgres/
+│   │   └── migrations/
+│   │       ├── 001_users.sql
+│   │       ├── 002_sessions.sql
+│   │       ├── 003_long_term_memory.sql
+│   │       ├── 004_messages.sql
+│   │       └── 005_auth.sql          # email nullable, messages→sessions FK
+│   └── redis/
+│       └── config.conf
+│
+├── infra/
+│   ├── docker-compose.yml            # Local dev — postgres + redis + all services
+│   └── nginx.conf                    # Reverse proxy config
+│
+├── docs/
+│   ├── ARCH.md
+│   ├── Flow.md
+│   ├── UML.md
+│   ├── ER_diagram.md
+│   └── planning/
+│       ├── epics.md
+│       └── stories.md
+│
+├── .env.example
+└── README.md
+```
+
+---
+
+## Local Development
+
+### Prerequisites
+
+- Node.js 20+
+- Python 3.11+
+- Docker Desktop (for postgres)
+- Redis (running locally, or use Docker)
+
+### 1. Clone and set up environment
+
+```bash
+git clone <repo-url>
+cd TalktoMe
+```
+
+### 2. Start infrastructure (postgres via Docker)
+
+```bash
+cd infra
+docker compose up -d postgres
+```
+
+> **Note:** If you have a local postgres already running on port 5432, the compose file maps Docker postgres to `5433`. Update `DATABASE_URL` accordingly.
+
+Redis is expected at `localhost:6379`. Start it separately if not already running:
+```bash
+redis-server
+```
+
+### 3. Conversation service
+
+```bash
+cd services/conversation
+
+# Copy env and fill in your values
+cp .env.example .env
+# Edit .env — set OPENROUTER_API_KEY and JWT_SECRET at minimum
+
+npm install
+npm run dev        # starts on PORT (default 3000, set in .env)
+```
+
+**`services/conversation/.env`:**
+```env
+PORT=4000
+DATABASE_URL=postgres://talktome:talktome@localhost:5433/talktome
+JWT_SECRET=<run: openssl rand -hex 32>
+OPENROUTER_API_KEY=sk-or-...
+LLM_MODEL=anthropic/claude-3.5-haiku
+EMOTION_SERVICE_URL=http://localhost:8001
+ATE_SERVICE_URL=http://localhost:8002
+CRISIS_SERVICE_URL=http://localhost:8003
+FILTER_SERVICE_URL=http://localhost:8004
+```
+
+### 4. Python microservices
+
+Install deps (shared packages, run once):
+```bash
+pip install fastapi "uvicorn[standard]" httpx
+```
+
+Start each service in a separate terminal:
+
+```bash
+# Emotion detection — port 8001
+cd services/emotion
+OPENROUTER_API_KEY=sk-or-... python3 -m uvicorn app:app --port 8001
+
+# Adaptive Therapy Engine — port 8002
+cd services/ate
+python3 -m uvicorn app:app --port 8002
+
+# Crisis detection — port 8003
+cd services/crisis
+python3 -m uvicorn app:app --port 8003
+
+# Response filter — port 8004
+cd services/filter
+python3 -m uvicorn app:app --port 8004
+```
+
+### 5. Web frontend
+
+```bash
+cd client/web
+
+cp .env.local.example .env.local
+# Edit .env.local — set CONVERSATION_SERVICE_URL
+
+npm install
+npm run dev        # starts on http://localhost:3000 (or 3001 if 3000 is taken)
+```
+
+**`client/web/.env.local`:**
+```env
+CONVERSATION_SERVICE_URL=http://localhost:4000
+```
+
+### Health checks
+
+```bash
+curl http://localhost:8001/health   # emotion
+curl http://localhost:8002/health   # ate
+curl http://localhost:8003/health   # crisis
+curl http://localhost:8004/health   # filter
+curl http://localhost:4000/health   # conversation
+```
+
+---
+
+## API Reference
+
+### Conversation Service (`localhost:4000`)
+
+All endpoints except `/auth/anon` require `Authorization: Bearer <token>`.
+
+#### `POST /auth/anon`
+
+Creates an anonymous account (no PII) and returns a signed JWT. Call this once on first launch and store the token.
+
+**Response:**
+```json
+{ "token": "<jwt>" }
+```
+
+---
+
+#### `POST /sessions`
+
+Creates a new conversation session linked to the authenticated user.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{ "session_id": "uuid-v4" }
+```
+
+---
+
+#### `POST /chat`
+
+Send a message and receive a reply.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Request:**
+```json
+{
+  "session_id": "uuid-v4",
+  "message": "I've been really anxious lately"
+}
+```
+
+**Response:**
+```json
+{
+  "session_id": "uuid-v4",
+  "reply": "That sounds really exhausting...",
+  "crisis": false
+}
+```
+
+`crisis: true` is returned when a high-risk flag triggered the crisis pipeline. Returns `403` if the session does not belong to the authenticated user.
+
+---
+
+#### `GET /chat/history/:session_id`
+
+Fetch the message history for a session.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{
+  "session_id": "uuid-v4",
+  "messages": [
+    { "role": "user", "content": "..." },
+    { "role": "assistant", "content": "..." }
+  ]
+}
+```
+
+Returns `403` if the session does not belong to the authenticated user.
+
+---
+
+### Python Services (internal)
+
+| Service | Endpoint | Input | Output |
+|---------|----------|-------|--------|
+| Emotion | `POST /classify` | `{ message, history_messages[] }` | `{ label, confidence }` |
+| ATE | `POST /modality` | `{ emotion_label, confidence }` | `{ modality, guidance }` |
+| Crisis | `POST /classify` | `{ message }` | `{ risk, probability, resources }` |
+| Filter | `POST /check` | `{ response }` | `{ passes, safety_reason, crisis_probability }` |
+
+---
+
+## Environment Variables
+
+### `services/conversation/.env`
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PORT` | No | Port to listen on (default: 3000) |
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `JWT_SECRET` | Yes | Secret used to sign anonymous JWTs — generate with `openssl rand -hex 32` |
+| `OPENROUTER_API_KEY` | Yes | API key for OpenRouter (or any OpenAI-compatible LLM provider) |
+| `LLM_MODEL` | No | Model ID to use (default: `anthropic/claude-3.5-haiku`) |
+| `EMOTION_SERVICE_URL` | Yes | Base URL of the emotion service |
+| `ATE_SERVICE_URL` | Yes | Base URL of the ATE service |
+| `CRISIS_SERVICE_URL` | Yes | Base URL of the crisis service |
+| `FILTER_SERVICE_URL` | Yes | Base URL of the filter service |
+
+### `client/web/.env.local`
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `CONVERSATION_SERVICE_URL` | Yes | Base URL of the conversation service (server-side only, never exposed to browser) |
 
 ---
 
@@ -78,125 +426,37 @@ In parallel, a dedicated **Crisis Detection** classifier runs on every message. 
 
 Privacy is enforced structurally, not as a policy.
 
-- **On-device encryption** — messages are encrypted before leaving the client. The server never sees plaintext.
-- **Per-user keys** — each user has a master key in KMS. Session keys are derived from it and rotated automatically.
-- **No content logs** — the API gateway logs session ID, timestamp, token count, and latency. Nothing else.
-- **Short-term memory** — last 20 turns stored encrypted in Redis. Auto-expires in 7 days.
-- **Long-term memory** — post-session theme vectors and JSON summaries only. No raw transcripts, no exact quotes, no message-level timestamps.
-- **Incognito mode** — zero persistence. Not even a theme vector is saved.
-- **Forget me** — master key destruction within 24 hours makes all stored data cryptographically irretrievable.
-- **Data export** — DPDP / GDPR-compliant encrypted JSON package delivered to verified email.
-
----
-
-## Key Features
-
-**Adaptive Therapy Engine** — dynamically selects and switches between CBT, journaling, mindfulness, validation, and SFBT based on detected emotional state, not user settings.
-
-**Memory without surveillance** — long-term themes (not raw transcripts) let TalktoMe feel continuous across sessions. Users don't start from zero every time.
-
-**Crisis-aware, not crisis-obsessed** — a dedicated parallel pipeline for detecting acute distress, tuned for recall over precision. Missing someone in crisis is the unacceptable failure mode.
-
-**Judgment-free design** — the system is explicitly instructed not to moralize, rush to solutions, or project emotions.
-
-**No engagement optimisation** — session length is not a KPI. The system does not tune for return frequency or time-on-app. Outcome metrics only.
-
----
-
-## Project Structure
-
-```
-talktome/
-│
-├── client/
-│   ├── web/                        # Next.js
-│   │   ├── app/
-│   │   ├── components/
-│   │   └── public/
-│   └── mobile/                     # React Native
-│       ├── android/
-│       ├── ios/
-│       └── src/
-│
-├── services/
-│   ├── conversation/               # Node.js — turn orchestration
-│   │   ├── src/
-│   │   │   ├── routes/
-│   │   │   ├── context/            # Context window assembly
-│   │   │   └── session/            # Redis session management
-│   │   └── package.json
-│   │
-│   ├── emotion/                    # Python — emotion detection
-│   │   ├── classifier.py
-│   │   ├── signals/
-│   │   │   ├── lexical.py
-│   │   │   ├── semantic.py
-│   │   │   ├── arc.py
-│   │   │   └── explicit.py
-│   │   └── requirements.txt
-│   │
-│   ├── ate/                        # Python — Adaptive Therapy Engine
-│   │   ├── engine.py
-│   │   ├── modalities/             # One file per therapy mode
-│   │   │   ├── validation.py
-│   │   │   ├── cbt.py
-│   │   │   ├── journaling.py
-│   │   │   ├── mindfulness.py
-│   │   │   ├── sfbt.py
-│   │   │   └── narrative.py
-│   │   ├── templates/              # Prompt templates per modality
-│   │   └── requirements.txt
-│   │
-│   ├── llm/                        # Python — external LLM API client wrapper
-│   │   ├── client.py
-│   │   ├── prompt_builder.py
-│   │   └── requirements.txt
-│   │
-│   ├── filter/                     # Python — response filter
-│   │   ├── safety.py
-│   │   ├── crisis_recheck.py
-│   │   └── requirements.txt
-│   │
-│   └── crisis/                     # Python — crisis pipeline
-│       ├── classifier.py
-│       ├── resources.py            # iCall, Vandrevala etc.
-│       ├── responses/              # Pre-cached warm responses
-│       └── requirements.txt
-│
-├── data/
-│   ├── redis/
-│   │   └── config.conf
-│   └── postgres/
-│       └── migrations/
-│           ├── 001_users.sql
-│           ├── 002_sessions.sql
-│           └── 003_long_term_memory.sql
-│
-├── infra/
-│   ├── docker-compose.yml          # Local dev
-│   └── nginx.conf                  # Reverse proxy
-│
-├── docs/
-│   ├── ARCH.md
-│   ├── planning/
-│   │   ├── epics.md
-│   │   └── stories.md
-│   └── architecture.md
-|
-├── README.md
-└── .env.example
-```
+- **Anonymous by default** — no email, no name, no phone number. A user is an opaque UUID. The browser receives a signed JWT; the server stores nothing linkable to a real identity.
+- **No content logs** — the conversation service logs error type only. No message content is ever written to a log.
+- **Session ownership enforced** — every read/write validates that the session belongs to the authenticated user. Session IDs alone are not enough to access data.
+- **Short-term memory** — last 20 turns per session in Redis, auto-expiring after 7 days of inactivity.
+- **Long-term memory** *(planned)* — post-session theme vectors and JSON summaries only. No raw transcripts, no exact quotes, no message-level timestamps.
+- **Incognito mode** *(planned)* — zero persistence. Not even a theme vector is saved.
+- **Forget me** *(planned)* — key destruction makes all stored data cryptographically irretrievable within 24 hours.
 
 ---
 
 ## Safety and Ethics
 
-- Crisis resources shown: **iCall** (9152987821) · **Vandrevala Foundation** (1860-2662-345)
+- Crisis resources surfaced: **iCall** (9152987821) · **Vandrevala Foundation** (1860-2662-345)
 - First-session disclosure: TalktoMe is an AI companion, not a therapist
 - TalktoMe will never deny being an AI if asked directly
 - No medication advice, no diagnosis, no clinical claims
-- Prompt injection and jailbreak attempts are silently caught and rerouted
+- Response filter blocks hallucinated clinical content before it reaches the user
 - All flagged safety events are logged by type only — no content
+
+---
+
+## Database Schema
+
+Migrations run automatically when the postgres Docker container starts (`docker-entrypoint-initdb.d`).
+
+| Table | Purpose |
+|-------|---------|
+| `users` | User accounts (anonymous by default) |
+| `sessions` | Session metadata |
+| `messages` | Per-turn message history (`session_id`, `role`, `content`, `created_at`) |
+| `long_term_memory` | Post-session theme vectors and summaries *(planned)* |
 
 ---
 
@@ -205,7 +465,7 @@ talktome/
 | Name | Role |
 |------|------|
 | Ved Pawar | Backend Engineering |
-| Aarya Srivastava | Product and  |
+| Aarya Srivastava | Product |
 | Aviral Mishra | System Design |
 | Khuswant Rajpurohit | Frontend / UI |
 | Samarth Khera | Frontend / UI |

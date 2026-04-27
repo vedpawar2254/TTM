@@ -1,11 +1,65 @@
 version: "3.9"
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: talktome
+      POSTGRES_USER: talktome
+      POSTGRES_PASSWORD: talktome
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../data/postgres/migrations:/docker-entrypoint-initdb.d
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - ../data/redis/config.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+
   conversation:
     image: talktome/conversation:dev
     ports:
       - "3001:3000"
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://talktome:talktome@postgres:5432/talktome
+      JWT_SECRET: ${JWT_SECRET}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-anthropic/claude-3.5-haiku}
+      EMOTION_SERVICE_URL: http://emotion:8000
+      ATE_SERVICE_URL: http://ate:8000
+      CRISIS_SERVICE_URL: http://crisis:8000
+      FILTER_SERVICE_URL: http://filter:8000
+    depends_on:
+      - postgres
+
   emotion:
     image: talktome/emotion:dev
     ports:
       - "8001:8000"
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-anthropic/claude-3.5-haiku}
+
+  ate:
+    image: talktome/ate:dev
+    ports:
+      - "8002:8000"
+
+  crisis:
+    image: talktome/crisis:dev
+    ports:
+      - "8003:8000"
+
+  filter:
+    image: talktome/filter:dev
+    ports:
+      - "8004:8000"
+
+volumes:
+  postgres_data:
