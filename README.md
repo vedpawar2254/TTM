@@ -6,6 +6,62 @@ TalktoMe is a conversational AI companion for the things people can't say out lo
 
 ---
 
+## Quick Start
+
+### Prerequisites
+- Node.js 18+ and npm
+- Python 3.10+ with venv
+- macOS / Linux (Windows support in progress)
+
+### Setup & Running
+
+#### 1. Install Python Dependencies
+```bash
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On macOS/Linux
+# .venv\Scripts\activate   # On Windows
+
+# Install backend dependencies
+pip install fastapi uvicorn pydantic httpx
+```
+
+#### 2. Install Frontend Dependencies
+```bash
+cd TTM/client/web
+npm install
+```
+
+#### 3. Start All Services
+```bash
+# Terminal 1: Web Frontend (Next.js)
+cd TTM/client/web
+npm run dev
+# Accessible at http://localhost:3000
+
+# Terminal 2: ATE Service
+.venv/bin/python -m uvicorn app:app --app-dir TTM/services/ate --port 8001 --host 127.0.0.1
+
+# Terminal 3: Crisis Service
+.venv/bin/python -m uvicorn app:app --app-dir TTM/services/crisis --port 8002 --host 127.0.0.1
+
+# Terminal 4: Emotion Service
+.venv/bin/python -m uvicorn app:app --app-dir TTM/services/emotion --port 8003 --host 127.0.0.1
+
+# Terminal 5: Filter Service
+.venv/bin/python -m uvicorn app:app --app-dir TTM/services/filter --port 8004 --host 127.0.0.1
+```
+
+#### Verify Services
+```bash
+curl http://127.0.0.1:8001/health
+curl http://127.0.0.1:8002/health
+curl http://127.0.0.1:8003/health
+curl http://127.0.0.1:8004/health
+```
+
+---
+
 ## The Problem
 
 People carry things they can't say to anyone — not because support isn't available, but because saying it out loud to a human makes it permanent and risky. Judgment from friends, awkwardness with family, the cost of therapy, the shame of admitting you're not okay. These aren't edge cases. They're the main reason most people process their hardest thoughts alone.
