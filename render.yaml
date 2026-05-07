@@ -1,0 +1,73 @@
+databases:
+  - name: talktome-db
+    plan: free
+    databaseName: talktome
+    user: talktome
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: conversation
+    runtime: docker
+    plan: free
+    dockerfilePath: ./services/conversation/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: talktome-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: anthropic/claude-3.5-haiku
+      - key: EMOTION_SERVICE_URL
+        sync: false
+      - key: ATE_SERVICE_URL
+        sync: false
+      - key: CRISIS_SERVICE_URL
+        sync: false
+      - key: FILTER_SERVICE_URL
+        sync: false
+
+  - type: web
+    name: emotion
+    runtime: docker
+    plan: free
+    dockerfilePath: ./services/emotion/Dockerfile
+    dockerContext: ./services/emotion
+    healthCheckPath: /health
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: anthropic/claude-3.5-haiku
+
+  - type: web
+    name: ate
+    runtime: docker
+    plan: free
+    dockerfilePath: ./services/ate/Dockerfile
+    dockerContext: ./services/ate
+    healthCheckPath: /health
+
+  - type: web
+    name: crisis
+    runtime: docker
+    plan: free
+    dockerfilePath: ./services/crisis/Dockerfile
+    dockerContext: ./services/crisis
+    healthCheckPath: /health
+
+  - type: web
+    name: filter
+    runtime: docker
+    plan: free
+    dockerfilePath: ./services/filter/Dockerfile
+    dockerContext: ./services/filter
+    healthCheckPath: /health
