@@ -6,10 +6,11 @@ from pydantic import BaseModel
 from base import CompositeSafetyCheck
 from safety import PatternSafetyCheck
 from crisis_recheck import CrisisRecheckCheck
+from guardrail import GuardrailCheck
 
 app = FastAPI(title="TalktoMe Filter Service")
 
-_checker = CompositeSafetyCheck([PatternSafetyCheck(), CrisisRecheckCheck()])
+_checker = CompositeSafetyCheck([PatternSafetyCheck(), CrisisRecheckCheck(), GuardrailCheck()])
 
 
 class FilterRequest(BaseModel):

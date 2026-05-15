@@ -9,6 +9,7 @@ const { checkCrisis } = require('../services/crisisClient');
 const { checkSafety } = require('../services/filterClient');
 const { getHistory } = require('../db/messages');
 const { requireAuth } = require('../middleware/auth');
+const { checkInput } = require('../services/inputGuard');
 
 const SAFE_FALLBACK =
   "I'm here for you. What you're going through sounds really hard. " +
@@ -32,6 +33,19 @@ router.post('/', requireAuth, async (req, res) => {
 
   if (!session_id || !message) {
     return res.status(400).json({ error: 'session_id and message are required' });
+  }
+
+  const guard = checkInput(message);
+  if (!guard.safe) {
+    console.warn(`[inputGuard] blocked: ${guard.reason}`);
+    return res.json({
+      session_id,
+      reply: "I'm here to support you. How are you feeling right now?",
+      crisis: false,
+    });
+  }
+  if (guard.severity === 'soft') {
+    console.warn(`[inputGuard] suspicious input allowed: ${guard.reason}`);
   }
 
   if (!await assertSessionOwner(session_id, req.userId)) {
