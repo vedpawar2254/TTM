@@ -10,7 +10,7 @@ services:
     name: conversation
     runtime: docker
     plan: free
-    dockerfilePath: ./services/conversation/Dockerfile
+    dockerfilePath: ./Dockerfile.backend
     dockerContext: .
     healthCheckPath: /health
     envVars:
@@ -27,55 +27,18 @@ services:
       - key: LLM_MODEL
         value: anthropic/claude-3.5-haiku
       - key: EMOTION_SERVICE_URL
-        sync: false
+        value: http://127.0.0.1:8001
       - key: ATE_SERVICE_URL
-        sync: false
+        value: http://127.0.0.1:8002
       - key: CRISIS_SERVICE_URL
-        sync: false
+        value: http://127.0.0.1:8003
       - key: FILTER_SERVICE_URL
-        sync: false
+        value: http://127.0.0.1:8004
       - key: REDIS_URL
         fromService:
           type: keyvalue
           name: talktome-redis
           property: connectionString
-
-  - type: web
-    name: emotion
-    runtime: docker
-    plan: free
-    dockerfilePath: ./services/emotion/Dockerfile
-    dockerContext: ./services/emotion
-    healthCheckPath: /health
-    envVars:
-      - key: OPENROUTER_API_KEY
-        sync: false
-      - key: LLM_MODEL
-        value: anthropic/claude-3.5-haiku
-
-  - type: web
-    name: ate
-    runtime: docker
-    plan: free
-    dockerfilePath: ./services/ate/Dockerfile
-    dockerContext: ./services/ate
-    healthCheckPath: /health
-
-  - type: web
-    name: crisis
-    runtime: docker
-    plan: free
-    dockerfilePath: ./services/crisis/Dockerfile
-    dockerContext: ./services/crisis
-    healthCheckPath: /health
-
-  - type: web
-    name: filter
-    runtime: docker
-    plan: free
-    dockerfilePath: ./services/filter/Dockerfile
-    dockerContext: ./services/filter
-    healthCheckPath: /health
 
   - type: keyvalue
     name: talktome-redis
