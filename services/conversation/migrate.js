@@ -2,8 +2,18 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 
+function needsSsl(connectionString = '') {
+  return process.env.PGSSLMODE === 'require'
+    || process.env.DATABASE_SSL === 'true'
+    || connectionString.includes('render.com');
+}
+
 async function migrate() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const connectionString = process.env.DATABASE_URL;
+  const pool = new Pool({
+    connectionString,
+    ssl: needsSsl(connectionString) ? { rejectUnauthorized: false } : undefined,
+  });
   const dir = path.join(__dirname, 'migrations');
 
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.sql')).sort();
